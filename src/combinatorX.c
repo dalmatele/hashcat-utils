@@ -28,11 +28,12 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-#define PROG_VERSION "1.3"
-#define PROG_RELEASE_DATE "Wed Aug 25 19:42:17 CEST 2021"
-
-#define WORD_MAX_LEN  64
-#define SEGMENT_SIZE  (WORD_MAX_LEN * 1024 * 1024)
+#define PROG_VERSION "1.5"
+#define PROG_RELEASE_DATE "Tue Mar 31 00:32:17 ICT 2026"
+//Gemini
+//EXPERIMENTAL: decrease buffer size to match the Hashcat's memory
+#define WORD_MAX_LEN  1 //64
+#define SEGMENT_SIZE  (WORD_MAX_LEN * 1024 * 1024) //64MB buffer
 #define SEGMENT_ALIGN (8 * 1024)
 
 // lightweight dolphin macro
@@ -497,7 +498,8 @@ static bool session_update (void)
 
   if(fwrite(&s_data, sizeof(s_data), 1, main_ctx.sfp[0]) != 1) return false;
   fflush (main_ctx.sfp[0]);
-  fsync (fileno(main_ctx.sfp[0]));
+  //EXPERIMENTAL: Loai bo dong nay de kiem tra xem toc do co cai thien hay khong
+  //fsync (fileno(main_ctx.sfp[0]));
   return true;
 }
 
