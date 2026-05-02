@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-#define PROG_VERSION "1.5"
+#define PROG_VERSION "1.6"
 #define PROG_RELEASE_DATE "Tue Mar 31 00:32:17 ICT 2026"
 //Gemini
 //EXPERIMENTAL: decrease buffer size to match the Hashcat's memory
@@ -668,61 +668,24 @@ static const char *short_options = "1:2:3:4:5:6:7:8:S:L:s:r:m:l:hv";
 { \
   uint64_t len_out = (uint64_t) (ptr_out - buf_out); \
   uint64_t len_add = sepStart_len + vir_in[0] + sep_len[0] + vir_in[1] + sep_len[1] + vir_in[2] + sep_len[2] + vir_in[3] + sep_len[3] + vir_in[4] + sep_len[4] + vir_in[5] + sep_len[5] + vir_in[6] + sep_len[6] + vir_in[7] + sepEnd_len + 1; \
-  bool ret = false, skipNow = false; \
+  bool ret = false; \
 \
   if ((len_out + len_add) >= SEGMENT_SIZE) \
   { \
-    /*if (debug) fprintf (stderr, "Done with current memory segment.\n");*/ \
     fwrite (buf_out, 1, len_out, stdout); \
-    fflush (stdout); \
     ptr_out = buf_out; \
-\
-    if (session_isSet || restore_isSet) \
-    { \
-      restore_isSet = false; \
-      session_isSet = true; \
-      /*if (debug) fprintf (stderr, "session update with current memory segment.\n");*/ \
-      if (session_update() == false) \
-      { \
-        EXIT_WITH_RET(-1) \
-      } \
-    } \
   } \
 \
-  if (skip_isSet) \
+  ret = add (ptr_out, ptr_in, vir_in, sepStart, sepStart_len, sep, sep_len, sepEnd, sepEnd_len); \
+\
+  if (ret) \
   { \
-    if (main_ctx.skip > 0) \
+    ptr_out += len_add; \
+    if (limit_isSet) \
     { \
-      main_ctx.skip--; \
-      skipNow = true; \
-      /*if (debug) fprintf (stderr, "Skipping sentence, remain to skip: %ld\n", main_ctx.skip);*/ \
-\
-      if ((session_isSet || restore_isSet) && (main_ctx.skip % (524287*32)) == 0) \
-      { \
-        /*if (debug) fprintf (stderr, "updating session.\n");*/ \
-        restore_isSet = false; \
-        session_isSet = true; \
-        if (session_update() == false) \
-        { \
-          EXIT_WITH_RET(-1) \
-        } \
-      } \
-    } \
-  } \
-\
-  if (!skipNow) \
-  { \
-    ret = add (ptr_out, ptr_in, vir_in, sepStart, sepStart_len, sep, sep_len, sepEnd, sepEnd_len); \
-\
-    if (ret) \
-    { \
-      ptr_out += len_add; \
-      if (limit_isSet) \
-      { \
-        main_ctx.limit--; \
-        end2 = (limit_isSet && main_ctx.limit == 0) ? true : false; \
-        if (end2) return; \
-      } \
+      main_ctx.limit--; \
+      end2 = (limit_isSet && main_ctx.limit == 0) ? true : false; \
+      if (end2) return; \
     } \
   } \
 }
@@ -878,6 +841,35 @@ static void generate_combinations(int file_idx, char *ptr_in[8], uint64_t vir_in
   // Reset index sau khi vòng lặp của file này hoàn thành
   main_ctx.cur_rep[file_idx] = 0;
 }
+static void fast_forward_skip(){
+  if(main_ctx.skip == 0) return;
+  int active_files[8];
+  int num_active = 0;
+  for(int i = 0; i < 8; i++){
+    if(main_ctx.file_lines[i] != NULL) active_files[num_active++] = i;
+  }
+  if(num_active == 0) return;
+  uint64_t remaining_skip = main_ctx.skip;
+  for(int k = num_active -1; k >= 0; k--){
+    int f_idx = active_files[k];
+    uint64_t lines = main_ctx.total_lines[f_idx];
+    uint64_t current_val = main_ctx.cur_rep[f_idx];
+    uint64_t added_val = remaining_skip % lines;
+    uint64_t carry = remaining_skip / lines;
+    current_val += added_val;
+    if(current_val >= lines){
+      current_val -= lines;
+      carry++;
+    }
+    main_ctx.cur_rep[f_idx] = current_val;
+    remaining_skip = carry;
+  }
+  if(remaining_skip > 0){
+    fprintf(stderr, "Warning: skip value is larger than total combinations, skipping to the end.\n");
+    end2 = true;
+  }
+  main_ctx.skip = 0;
+}
 
 int main (int argc, char *argv[])
 {
@@ -987,6 +979,7 @@ int main (int argc, char *argv[])
     fprintf(stderr, "! Error loading files to RAM. OOM or missing file.\n");
     EXIT_WITH_RET(-1);
   }
+  fast_forward_skip();
 
   // 2. Cấp phát Memory Buffer để in ra
   char *buf_out = (char *) malloc (SEGMENT_SIZE);
