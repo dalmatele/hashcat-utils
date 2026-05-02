@@ -829,6 +829,7 @@ static void generate_combinations(int file_idx, char *ptr_in[8], uint64_t vir_in
   }
 
   for (uint64_t i = main_ctx.cur_rep[file_idx]; i < main_ctx.total_lines[file_idx]; i++) {
+    main_ctx.cur_rep[file_idx] = i;
     ptr_in[file_idx] = main_ctx.file_lines[file_idx][i];
     vir_in[file_idx] = main_ctx.line_lens[file_idx][i];
     
